@@ -104,13 +104,13 @@ class SpawnManager:
         if not guild.member_count:
             return
         elif guild.member_count < 5:
-            multiplier = 0.1
+            multiplier = 5.0
         elif guild.member_count < 100:
-            multiplier = 0.8
+            multiplier = 10.0
         elif guild.member_count < 1000:
-            multiplier = 0.5
+            multiplier = 20.0
         else:
-            multiplier = 0.2
+            multiplier = 3.0
         chance = cooldown.chance - multiplier * (delta // 60)
 
         # manager cannot be increased more than once per 5 seconds
