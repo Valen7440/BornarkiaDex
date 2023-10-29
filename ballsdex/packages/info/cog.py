@@ -131,6 +131,8 @@ class Info(commands.Cog):
         for cog in self.bot.cogs.values():
             if cog.qualified_name == "Admin":
                 continue
+            if cog.qualified_name == "Booster":
+                continue
             content = ""
             for app_command in cog.walk_app_commands():
                 content += f"{mention_app_command(app_command)}: {app_command.description}\n"

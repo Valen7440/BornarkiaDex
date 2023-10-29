@@ -45,7 +45,7 @@ if TYPE_CHECKING:
 log = logging.getLogger("ballsdex.core.bot")
 http_counter = Histogram("discord_http_requests", "HTTP requests", ["key", "code"])
 
-PACKAGES = ["config", "players", "countryballs", "info", "admin", "trade"]
+PACKAGES = ["config", "players", "countryballs", "info", "admin", "trade", "booster"]
 
 
 def owner_check(ctx: commands.Context[BallsDexBot]):
@@ -312,8 +312,8 @@ class BallsDexBot(commands.AutoShardedBot):
         if interaction.user.id in self.blacklist:
             if interaction.type != discord.InteractionType.autocomplete:
                 await interaction.response.send_message(
-                    "You are blacklisted from the bot."
-                    "\nYou can appeal this blacklist in our support server: {}".format(
+                    "Parece que fuiste blacklisteado porque incumpliste alguna regla o por error."
+                    "\nPuedes apelar tu blacklist en: {}".format(
                         settings.discord_invite
                     ),
                     ephemeral=True,
@@ -322,8 +322,8 @@ class BallsDexBot(commands.AutoShardedBot):
         if interaction.guild_id and interaction.guild_id in self.blacklist_guild:
             if interaction.type != discord.InteractionType.autocomplete:
                 await interaction.response.send_message(
-                    "This server is blacklisted from the bot."
-                    "\nYou can appeal this blacklist in our support server: {}".format(
+                    "Parece que este servidor fue blacklisteado porque incumpliste alguna regla o por error."
+                    "\nPueden apelar el blacklist en: {}".format(
                         settings.discord_invite
                     ),
                     ephemeral=True,

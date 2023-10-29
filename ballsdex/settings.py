@@ -48,6 +48,10 @@ class Settings:
         List of roles that have full access to the /admin command
     admin_role_ids: list[int]
         List of roles that have partial access to the /admin command (only blacklist and guilds)
+    booster_guild_ids: list[int]
+        Lista de servidores que tendrán acceso al comando "/booster".
+    booster_role_ids:
+        Lista de roles que tendrán acceso a los comandos "/booster". 
     """
 
     bot_token: str = ""
@@ -70,6 +74,10 @@ class Settings:
     admin_guild_ids: list[int] = field(default_factory=list)
     root_role_ids: list[int] = field(default_factory=list)
     admin_role_ids: list[int] = field(default_factory=list)
+
+    # /booster
+    booster_guilds_ids: list[int] = field(default_factory=list)
+    booster_role_ids: list[int] = field(default_factory=list)
 
     log_channel: int | None = None
 
@@ -108,6 +116,9 @@ def read_settings(path: "Path"):
     settings.admin_guild_ids = content["admin-command"]["guild-ids"] or []
     settings.root_role_ids = content["admin-command"]["root-role-ids"] or []
     settings.admin_role_ids = content["admin-command"]["admin-role-ids"] or []
+
+    settings.booster_guilds_ids = content["booster-command"]["guild-ids"] or []
+    settings.booster_role_ids = content["booster-command"]["booster-role-ids"] or []
 
     settings.log_channel = content.get("log-channel", None)
 
@@ -172,6 +183,20 @@ admin-command:
 
   # list of role IDs having partial access to /admin
   admin-role-ids:
+
+# Activa los comandos de /booster.
+booster-command:
+
+  # Elige en donde estarán disponibles los comandos para boosters.
+  # Ejemplo:
+  # guild-ids:
+  #  - 1150394907899473990
+
+  # Lista de servidores que tendrán acceso al comando "/booster".
+  guild-ids:
+
+  # Lista de roles que tendrán acceso a los comandos "/booster". 
+  booster-role-ids:
 
 # log channel for moderation actions
 log-channel:

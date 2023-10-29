@@ -161,7 +161,6 @@ class Ball(models.Model):
 
 Ball.register_listener(signals.Signals.pre_save, lower_catch_names)
 
-
 class BallInstance(models.Model):
     ball_id: int
     special_id: int
@@ -320,7 +319,6 @@ class BallInstance(models.Model):
             buffer = await interaction.client.loop.run_in_executor(pool, self.draw_card)
 
         return content, discord.File(buffer, "card.png")
-
 
 class DonationPolicy(IntEnum):
     ALWAYS_ACCEPT = 1

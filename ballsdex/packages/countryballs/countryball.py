@@ -37,7 +37,7 @@ class CountryBall:
         file_name = f"nt_{generate_random_name()}.{extension}"
         try:
             self.message = await channel.send(
-                f"A wild {settings.collectible_name} appeared!",
+                f"¡Ey, aparecio una countryball salvaje!",
                 view=CatchView(self),
                 file=discord.File(file_location, filename=file_name),
             )
