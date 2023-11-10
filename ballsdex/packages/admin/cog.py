@@ -82,6 +82,62 @@ class Admin(commands.GroupCog):
 
     @app_commands.command()
     @app_commands.checks.has_any_role(*settings.root_role_ids)
+    async def reloadcache(
+        self,
+        interaction: discord.Interaction,
+    ):
+        """
+        Reload the cache of database models.
+
+        This is needed each time the database is updated, otherwise changes won't reflect until
+        next start.
+        """
+        await self.bot.load_cache()
+        await interaction.response.send_message("Se ha recargado la base de datos correctamente.", ephemeral=True)
+
+    @app_commands.command()
+    @app_commands.checks.has_any_role(*settings.root_role_ids)
+    async def reload( 
+        self,
+        interaction: discord.Interaction,
+        package: str
+    ):
+        """
+        Recarga algún paquete (Players, Info, etc).
+
+        Parameters
+        ----------
+        package: str
+            Paquete a recargar (Recordar poner en minuscula) (Paquetes: admin, booster, config, countryballs, info, players, trade)
+        """
+        self.package = "ballsdex.packages." + package
+        if not self.package:
+            await interaction.response.send_message("No se encuentra ese paquete.", ephemeral=True)
+        try:
+            try:
+                await self.bot.reload_extension(self.package)
+            except commands.ExtensionNotLoaded:
+                await self.bot.load_extension(self.package)
+        except commands.ExtensionNotFound:
+            await interaction.response.send_message("No existe esa Extension.", ephemeral=True)
+        except Exception:
+            await interaction.response.send_message(f"Error al cargar la Extension.", ephemeral=True)
+        else:
+            await interaction.response.send_message("Se ha recargado la Extension correctamente.", ephemeral=True)
+
+   @app_commands.command()
+   @app_commands.checks.has_any_role(*settings.root_role_ids)
+    async def reload(
+        self,
+        interaction: discord.Interaction,
+        package: "ballsdex.package" + package
+    ):
+        """
+        Recarga algún paquete (Booster, Config, etc).
+        """
+
+    @app_commands.command()
+    @app_commands.checks.has_any_role(*settings.root_role_ids)
     async def status(
         self,
         interaction: discord.Interaction,
