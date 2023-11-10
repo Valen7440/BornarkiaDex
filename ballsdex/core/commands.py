@@ -65,7 +65,7 @@ class Core(commands.Cog):
         next start.
         """
         await self.bot.load_cache()
-        await ctx.message.add_reaction("<:Bornarkia:1147582904109629592>")
+        await ctx.message.add_reaction("✅")
 
     @commands.command()
     @commands.is_owner()
