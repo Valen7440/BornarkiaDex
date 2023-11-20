@@ -88,12 +88,9 @@ class Admin(commands.GroupCog):
     ):
         """
         Reload the cache of database models.
-
-        This is needed each time the database is updated, otherwise changes won't reflect until
-        next start.
         """
         await self.bot.load_cache()
-        await interaction.response.send_message("Se ha recargado la base de datos correctamente.", ephemeral=True)
+        await interaction.response.send_message("The database has been reloaded successfully.", ephemeral=True)
 
     @app_commands.command()
     @app_commands.checks.has_any_role(*settings.root_role_ids)
@@ -103,38 +100,28 @@ class Admin(commands.GroupCog):
         package: str
     ):
         """
-        Recarga algún paquete (Players, Info, etc).
+        Reload a package.
 
         Parameters
         ----------
         package: str
-            Paquete a recargar (Recordar poner en minuscula) (Paquetes: admin, booster, config, countryballs, info, players, trade)
+            Package to reload (Remember to put in lowercase) (Packages: admin, booster, config, countryballs, info, players, trade)
         """
         self.package = "ballsdex.packages." + package
         if not self.package:
-            await interaction.response.send_message("No se encuentra ese paquete.", ephemeral=True)
+            await interaction.response.send_message("That package cannot be found.", ephemeral=True)
         try:
             try:
                 await self.bot.reload_extension(self.package)
             except commands.ExtensionNotLoaded:
                 await self.bot.load_extension(self.package)
         except commands.ExtensionNotFound:
-            await interaction.response.send_message("No existe esa Extension.", ephemeral=True)
+            await interaction.response.send_message("There is no such Extension.", ephemeral=True)
         except Exception:
-            await interaction.response.send_message(f"Error al cargar la Extension.", ephemeral=True)
+            await interaction.response.send_message(f"Error loading the Extension.", ephemeral=True)
         else:
-            await interaction.response.send_message("Se ha recargado la Extension correctamente.", ephemeral=True)
+            await interaction.response.send_message("The Extension has been reloaded successfully.", ephemeral=True)
 
-   @app_commands.command()
-   @app_commands.checks.has_any_role(*settings.root_role_ids)
-    async def reload(
-        self,
-        interaction: discord.Interaction,
-        package: "ballsdex.package" + package
-    ):
-        """
-        Recarga algún paquete (Booster, Config, etc).
-        """
 
     @app_commands.command()
     @app_commands.checks.has_any_role(*settings.root_role_ids)
