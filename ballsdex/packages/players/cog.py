@@ -308,14 +308,14 @@ class Players(commands.GroupCog, group_name=settings.players_group_cog_name):
     async def rarity(self, interaction: discord.Interaction):
          # DO NOT CHANGE THE CREDITS TO THE AUTHOR HERE!
         """
-        Mira la rareza de las countryballs. - made by GamingadlerHD
+        Show the rarity list of the dex. - made by GamingadlerHD
         """
         # Filter enabled collectibles
         enabled_collectibles = [x for x in balls.values() if x.enabled]
 
         if not enabled_collectibles:
             await interaction.response.send_message(
-                f"No hay {settings.collectible_name} en la dex.",
+                f"There are no fictionalballs registered on this bot yet.",
                 ephemeral=True,
             )
             return
