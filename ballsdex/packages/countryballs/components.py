@@ -77,7 +77,7 @@ class CountryballNamePrompt(Modal, title=f"Atrapa a este {settings.collectible_n
             self.button.disabled = True
             await interaction.followup.edit_message(self.ball.message.id, view=self.button.view)
         else:
-            await interaction.response.send_message(f"{interaction.user.mention}, Nombre incorrecto. Pusiste: {self.name.value.lower().strip()}.")
+            await interaction.response.send_message(f"{interaction.user.mention} Wrong Name. Your answer: {self.name.value.lower().strip()}.")
 
     async def catch_ball(
         self, bot: "BallsDexBot", user: discord.Member
