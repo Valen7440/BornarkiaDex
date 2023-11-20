@@ -26,7 +26,7 @@ caught_balls = Counter(
 
 class CountryballNamePrompt(Modal, title=f"Atrapa a este {settings.collectible_name}."):
     name = TextInput(
-        label="Name of this country", style=discord.TextStyle.short, placeholder="Your guess"
+        label="Name of this fictional country", style=discord.TextStyle.short, placeholder="Your guess"
     )
 
     def __init__(self, ball: "CountryBall", button: CatchButton):
@@ -35,17 +35,17 @@ class CountryballNamePrompt(Modal, title=f"Atrapa a este {settings.collectible_n
         self.button = button
 
     async def on_error(self, interaction: discord.Interaction, error: Exception, /) -> None:
-        log.exception("Se produjo un error al capturar el countryball.", exc_info=error)
+        log.exception("An error ocurred in fictionalball catching prompt.", exc_info=error)
         if interaction.response.is_done():
-            await interaction.followup.send("Ocurrió un error al atrapar este countryball.")
+            await interaction.followup.send("An error occured with this fictionalball.")
         else:
-            await interaction.response.send_message("Ocurrió un error al atrapar este countryball.")
+            await interaction.response.send_message("An error occured with this fictionalball.")
 
     async def on_submit(self, interaction: discord.Interaction["BallsDexBot"]):
         # TODO: use lock
         if self.ball.catched:
             await interaction.response.send_message(
-                f"{interaction.user.mention}, Ya atraparon a esta {settings.collectible_name}."
+                f"{interaction.user.mention} This fictionalball was caught!"
             )
             return
         if self.ball.model.catch_names:
@@ -61,17 +61,17 @@ class CountryballNamePrompt(Modal, title=f"Atrapa a este {settings.collectible_n
 
             special = ""
             if ball.shiny:
-                special += f"✨ ***¡Felicidades! Tu ball es una {settings.collectible_name} shiny.*** ✨\n"
+                special += f"✨ ***Congratulations! You got a shiny fictionalball!*** ✨\n"
             if ball.specialcard and ball.specialcard.catch_phrase:
                 special += f"*{ball.specialcard.catch_phrase}*\n"
             if has_caught_before:
                 special += (
-                    f"Este es un **nuevo {settings.collectible_name}** "
-                    "en tu completion."
+                    f"This fictionalball is a **new fictionalball** "
+                    "in your completion."
                 )
 
             await interaction.followup.send(
-                f"{interaction.user.mention}, ¡Atrapaste a **{self.ball.name}!** "
+                f"{interaction.user.mention} You caught **{self.ball.name}!** "
                 f"(`#{ball.pk:0X}`)\n\n{special}",
             )
             self.button.disabled = True
@@ -116,12 +116,12 @@ class CountryballNamePrompt(Modal, title=f"Atrapa a este {settings.collectible_n
         )
         if user.id in bot.catch_log:
             log.info(
-                f"{user} atrapo {settings.collectible_name}"
+                f"{user} caught {settings.collectible_name}"
                 f" {self.ball.model}, {shiny=} {special=}",
             )
         else:
             log.debug(
-                f"{user} atrapo {settings.collectible_name}"
+                f"{user} caught {settings.collectible_name}"
                 f" {self.ball.model}, {shiny=} {special=}",
             )
         if user.guild.member_count:
