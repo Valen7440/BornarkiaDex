@@ -87,7 +87,7 @@ class CountryballNamePrompt(Modal, title=f"Atrapa a este {settings.collectible_n
         # stat may vary by +/- 20% of base stat
         bonus_attack = random.randint(-20, 20)
         bonus_health = random.randint(-20, 20)
-        shiny = random.randint(1, 1000) == 1
+        shiny = random.randint(1, 1500) == 1
 
         # check if we can spawn cards with a special background
         special: "Special | None" = None
