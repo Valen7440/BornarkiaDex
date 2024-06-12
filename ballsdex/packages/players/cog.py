@@ -1,231 +1,59 @@
-import enum
-import logging
-from collections import defaultdict
+import zipfile
+from io import BytesIO
 from typing import TYPE_CHECKING
 
 import discord
 from discord import app_commands
 from discord.ext import commands
-from discord.ui import Button, View, button
-from tortoise.exceptions import DoesNotExist
+from tortoise.expressions import Q
 
-from ballsdex.core.models import BallInstance, DonationPolicy, Player, Trade, TradeObject, balls
-from ballsdex.core.utils.paginator import FieldPageSource, Pages
-from ballsdex.core.utils.transformers import BallInstanceTransform
-from ballsdex.packages.players.countryballs_paginator import CountryballsViewer
+from ballsdex.core.models import BallInstance, DonationPolicy
+from ballsdex.core.models import Player as PlayerModel
+from ballsdex.core.models import PrivacyPolicy, Trade, TradeObject
+from ballsdex.core.utils.buttons import ConfirmChoiceView
 from ballsdex.settings import settings
 
 if TYPE_CHECKING:
     from ballsdex.core.bot import BallsDexBot
 
-log = logging.getLogger("ballsdex.packages.countryballs")
 
-
-class DonationRequest(View):
-    def __init__(
-        self,
-        bot: "BallsDexBot",
-        interaction: discord.Interaction,
-        countryball: BallInstance,
-        new_player: Player,
-    ):
-        super().__init__(timeout=120)
-        self.bot = bot
-        self.original_interaction = interaction
-        self.countryball = countryball
-        self.new_player = new_player
-
-    async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
-        if interaction.user.id != self.new_player.discord_id:
-            await interaction.response.send_message(
-                "You are not allowed to interact with this menu.", ephemeral=True
-            )
-            return False
-        return True
-
-    async def on_timeout(self):
-        for item in self.children:
-            item.disabled = True  # type: ignore
-        try:
-            await self.original_interaction.followup.edit_message(
-                "@original", view=self  # type: ignore
-            )
-        except discord.NotFound:
-            pass
-        del self.bot.locked_balls[self.countryball.pk]
-
-    @button(
-        style=discord.ButtonStyle.success, emoji="\N{HEAVY CHECK MARK}\N{VARIATION SELECTOR-16}"
-    )
-    async def accept(self, interaction: discord.Interaction, button: Button):
-        self.stop()
-        for item in self.children:
-            item.disabled = True  # type: ignore
-        self.countryball.trade_player = self.countryball.player
-        self.countryball.player = self.new_player
-        await self.countryball.save()
-        await interaction.response.edit_message(
-            content=interaction.message.content  # type: ignore
-            + "\n\N{WHITE HEAVY CHECK MARK} The donation was accepted!",
-            view=self,
-        )
-        del self.bot.locked_balls[self.countryball.pk]
-
-    @button(
-        style=discord.ButtonStyle.danger,
-        emoji="\N{HEAVY MULTIPLICATION X}\N{VARIATION SELECTOR-16}",
-    )
-    async def deny(self, interaction: discord.Interaction, button: Button):
-        self.stop()
-        for item in self.children:
-            item.disabled = True  # type: ignore
-        await interaction.response.edit_message(
-            content=interaction.message.content  # type: ignore
-            + "\n\N{CROSS MARK} The donation was denied.",
-            view=self,
-        )
-        del self.bot.locked_balls[self.countryball.pk]
-
-
-class SortingChoices(enum.Enum):
-    alphabetic = "ball__country"
-    catch_date = "-catch_date"
-    rarity = "ball__rarity"
-    special = "special__id"
-    health = "health"
-    attack = "attack"
-    health_bonus = "-health_bonus"
-    attack_bonus = "-attack_bonus"
-    stats_bonus = "stats"
-    total_stats = "total_stats"
-
-    # manual sorts are not sorted by SQL queries but by our code
-    # this may be do-able with SQL still, but I don't have much experience ngl
-    duplicates = "manualsort-duplicates"
-
-
-class Players(commands.GroupCog, group_name=settings.players_group_cog_name):
+class Player(commands.GroupCog):
     """
-    View and manage your countryballs collection.
+    Manage your account settings.
     """
 
     def __init__(self, bot: "BallsDexBot"):
         self.bot = bot
+        if not self.bot.intents.members:
+            self.__cog_app_commands_group__.get_command("privacy").parameters[  # type: ignore
+                0
+            ]._Parameter__parent.choices.pop()  # type: ignore
 
     @app_commands.command()
-    @app_commands.checks.cooldown(1, 10, key=lambda i: i.user.id)
-    async def list(
-        self,
-        interaction: discord.Interaction["BallsDexBot"],
-        user: discord.Member | None = None,
-        sort: SortingChoices | None = None,
-        reverse: bool = False,
-    ):
+    @app_commands.choices(
+        policy=[
+            app_commands.Choice(name="Open Inventory", value=PrivacyPolicy.ALLOW),
+            app_commands.Choice(name="Private Inventory", value=PrivacyPolicy.DENY),
+            app_commands.Choice(name="Same Server", value=PrivacyPolicy.SAME_SERVER),
+        ]
+    )
+    async def privacy(self, interaction: discord.Interaction, policy: PrivacyPolicy):
         """
-        List your countryballs.
-
-        Parameters
-        ----------
-        user: discord.User
-            The user whose collection you want to view, if not yours.
-        sort: SortingChoices
-            Choose how countryballs are sorted. Can be used to show duplicates.
-        reverse: bool
-            Reverse the output of the list.
+        Set your privacy policy.
         """
-        user_obj = user or interaction.user
-        await interaction.response.defer(thinking=True)
-
-        try:
-            player = await Player.get(discord_id=user_obj.id)
-        except DoesNotExist:
-            if user_obj == interaction.user:
-                await interaction.followup.send(
-                    f"You don't have any {settings.collectible_name} yet."
-                )
-            else:
-                await interaction.followup.send(
-                    f"{user_obj.name} doesn't have any {settings.collectible_name} yet."
-                )
-            return
-
-        await player.fetch_related("balls")
-        if sort:
-            if sort == SortingChoices.duplicates:
-                countryballs = await player.balls.all()
-                count = defaultdict(int)
-                for countryball in countryballs:
-                    count[countryball.countryball.pk] += 1
-                countryballs.sort(key=lambda m: (-count[m.countryball.pk], m.countryball.pk))
-            elif sort == SortingChoices.stats_bonus:
-                countryballs = await player.balls.all()
-                countryballs.sort(key=lambda x: (x.health_bonus, x.attack_bonus), reverse=True)
-            elif sort == SortingChoices.health or sort == SortingChoices.attack:
-                countryballs = await player.balls.all()
-                countryballs.sort(key=lambda x: getattr(x, sort.value), reverse=True)
-            elif sort == SortingChoices.total_stats:
-                countryballs = await player.balls.all()
-                countryballs.sort(key=lambda x: (x.health, x.attack), reverse=True)
-            else:
-                countryballs = await player.balls.all().order_by(sort.value)
-        else:
-            countryballs = await player.balls.all().order_by("-favorite", "-shiny")
-
-        if len(countryballs) < 1:
-            if user_obj == interaction.user:
-                await interaction.followup.send(
-                    f"You don't have any {settings.collectible_name} yet."
-                )
-            else:
-                await interaction.followup.send(
-                    f"{user_obj.name} doesn't have any {settings.collectible_name} yet."
-                )
-            return
-        if reverse:
-            countryballs.reverse()
-
-        paginator = CountryballsViewer(interaction, countryballs)
-        if user_obj == interaction.user:
-            await paginator.start()
-        else:
-            await paginator.start(
-                content=f"Viewing {user_obj.name}'s {settings.collectible_name}s"
-            )
-
-    @app_commands.command()
-    @app_commands.checks.cooldown(1, 60, key=lambda i: i.user.id)
-    async def completion(
-        self, interaction: discord.Interaction["BallsDexBot"], user: discord.User | None = None
-    ):
-        """
-        Show your current completion of the BallsDex.
-
-        Parameters
-        ----------
-        user: discord.User
-            The user whose completion you want to view, if not yours.
-        """
-        user_obj = user or interaction.user
-        # Filter disabled balls, they do not count towards progression
-        # Only ID and emoji is interesting for us
-        bot_countryballs = {x: y.emoji_id for x, y in balls.items() if y.enabled}
-
-        if not bot_countryballs:
+        if policy == PrivacyPolicy.SAME_SERVER and not self.bot.intents.members:
             await interaction.response.send_message(
-                f"There are no {settings.collectible_name}s registered on this bot yet.",
-                ephemeral=True,
+                "I need the `members` intent to use this policy.", ephemeral=True
             )
             return
-        await interaction.response.defer(thinking=True)
-
-        # Set of ball IDs owned by the player
-        owned_countryballs = set(
-            x[0]
-            for x in await BallInstance.filter(player__discord_id=user_obj.id, ball__enabled=True)
-            .distinct()  # Do not query everything
-            .values_list("ball_id")
+        player, _ = await PlayerModel.get_or_create(discord_id=interaction.user.id)
+        player.privacy_policy = policy
+        await player.save()
+        await interaction.response.send_message(
+            f"Your privacy policy has been set to **{policy.name}**.", ephemeral=True
         )
 
+<<<<<<< HEAD
         entries: list[tuple[str, str]] = []
 
         def fill_fields(title: str, emoji_ids: set[int]):
@@ -433,6 +261,8 @@ class Players(commands.GroupCog, group_name=settings.players_group_cog_name):
                 ephemeral=True,
             )
 
+=======
+>>>>>>> upstream/master
     @app_commands.command()
     @app_commands.choices(
         policy=[
@@ -454,7 +284,7 @@ class Players(commands.GroupCog, group_name=settings.players_group_cog_name):
         policy: DonationPolicy
             The new policy for accepting donations
         """
-        player, _ = await Player.get_or_create(discord_id=interaction.user.id)
+        player, _ = await PlayerModel.get_or_create(discord_id=interaction.user.id)
         player.donation_policy = DonationPolicy(policy.value)
         if policy.value == DonationPolicy.ALWAYS_ACCEPT:
             await interaction.response.send_message(
@@ -467,7 +297,8 @@ class Players(commands.GroupCog, group_name=settings.players_group_cog_name):
             )
         elif policy.value == DonationPolicy.ALWAYS_DENY:
             await interaction.response.send_message(
-                f"Setting updated, it is now impossible to use {self.give.extras['mention']} with "
+                "Setting updated, it is now impossible to use "
+                f"`/{settings.players_group_cog_name} give` with "
                 "you. It is still possible to perform donations using the trade system."
             )
         else:
@@ -476,73 +307,128 @@ class Players(commands.GroupCog, group_name=settings.players_group_cog_name):
         await player.save()  # do not save if the input is invalid
 
     @app_commands.command()
-    async def give(
-        self,
-        interaction: discord.Interaction,
-        user: discord.User,
-        countryball: BallInstanceTransform,
-    ):
+    async def delete(self, interaction: discord.Interaction):
         """
-        Give a countryball to a user.
-
-        Parameters
-        ----------
-        user: discord.User
-            The user you want to give a countryball to
-        countryball: BallInstance
-            The countryball you're giving away
+        Delete your player data.
         """
-        if not countryball:
-            return
-        if not countryball.countryball.tradeable:
-            await interaction.response.send_message(
-                "You cannot donate this countryball.", ephemeral=True
-            )
-            return
-        if user.bot:
-            await interaction.response.send_message("You cannot donate to bots.")
-            return
-        if countryball.pk in self.bot.locked_balls:
-            await interaction.response.send_message(
-                "This countryball is currently locked for a trade. Please try again later."
-            )
-            return
-        self.bot.locked_balls[countryball.pk] = None
-        new_player, _ = await Player.get_or_create(discord_id=user.id)
-        old_player = countryball.player
-
-        if new_player == old_player:
-            await interaction.response.send_message(
-                f"You cannot give a {settings.collectible_name} to yourself."
-            )
-            del self.bot.locked_balls[countryball.pk]
-            return
-        if new_player.donation_policy == DonationPolicy.ALWAYS_DENY:
-            await interaction.response.send_message(
-                "This player does not accept donations. You can use trades instead."
-            )
-            del self.bot.locked_balls[countryball.pk]
-            return
-        elif new_player.donation_policy == DonationPolicy.REQUEST_APPROVAL:
-            await interaction.response.send_message(
-                f"Hey {user.mention}, {interaction.user.name} wants to give you "
-                f"{countryball.description(include_emoji=True, bot=interaction.client)}!\n"
-                "Do you accept this donation?",
-                view=DonationRequest(self.bot, interaction, countryball, new_player),
-            )
-            return
-
-        countryball.player = new_player
-        countryball.trade_player = old_player
-        countryball.favorite = False
-        await countryball.save()
-
-        trade = await Trade.create(player1=old_player, player2=new_player)
-        await TradeObject.create(trade=trade, ballinstance=countryball, player=old_player)
-
+        view = ConfirmChoiceView(interaction)
         await interaction.response.send_message(
-            f"You just gave the {settings.collectible_name} "
-            f"{countryball.description(short=True, include_emoji=True, bot=self.bot)} to "
-            f"{user.mention}!"
+            "Are you sure you want to delete your player data?", view=view, ephemeral=True
         )
-        del self.bot.locked_balls[countryball.pk]
+        await view.wait()
+        if view.value is None or not view.value:
+            return
+        player, _ = await PlayerModel.get_or_create(discord_id=interaction.user.id)
+        await player.delete()
+
+    @app_commands.command()
+    @app_commands.choices(
+        type=[
+            app_commands.Choice(name=settings.collectible_name.title(), value="balls"),
+            app_commands.Choice(name="Trades", value="trades"),
+            app_commands.Choice(name="All", value="all"),
+        ]
+    )
+    async def export(self, interaction: discord.Interaction, type: str):
+        """
+        Export your player data.
+        """
+        player = await PlayerModel.get_or_none(discord_id=interaction.user.id)
+        if player is None:
+            await interaction.response.send_message(
+                "You don't have any player data to export.", ephemeral=True
+            )
+            return
+        await interaction.response.defer()
+        files = []
+        if type == "balls":
+            data = await get_items_csv(player)
+            filename = f"{interaction.user.id}_{settings.collectible_name}.csv"
+            data.filename = filename  # type: ignore
+            files.append(data)
+        elif type == "trades":
+            data = await get_trades_csv(player)
+            filename = f"{interaction.user.id}_trades.csv"
+            data.filename = filename  # type: ignore
+            files.append(data)
+        elif type == "all":
+            balls = await get_items_csv(player)
+            trades = await get_trades_csv(player)
+            balls_filename = f"{interaction.user.id}_{settings.collectible_name}.csv"
+            trades_filename = f"{interaction.user.id}_trades.csv"
+            balls.filename = balls_filename  # type: ignore
+            trades.filename = trades_filename  # type: ignore
+            files.append(balls)
+            files.append(trades)
+        else:
+            await interaction.followup.send("Invalid input!", ephemeral=True)
+            return
+        zip_file = BytesIO()
+        with zipfile.ZipFile(zip_file, "w") as z:
+            for file in files:
+                z.writestr(file.filename, file.getvalue())
+        zip_file.seek(0)
+        if zip_file.tell() > 25_000_000:
+            await interaction.followup.send(
+                "Your data is too large to export."
+                "Please contact the bot support for more information.",
+                ephemeral=True,
+            )
+            return
+        files = [discord.File(zip_file, "player_data.zip")]
+        try:
+            await interaction.user.send("Here is your player data:", files=files)
+            await interaction.followup.send(
+                "Your player data has been sent via DMs.", ephemeral=True
+            )
+        except discord.Forbidden:
+            await interaction.followup.send(
+                "I couldn't send the player data to you in DM. "
+                "Either you blocked me or you disabled DMs in this server.",
+                ephemeral=True,
+            )
+
+
+async def get_items_csv(player: PlayerModel) -> BytesIO:
+    """
+    Get a CSV file with all items of the player.
+    """
+    balls = await BallInstance.filter(player=player).prefetch_related(
+        "ball", "trade_player", "special"
+    )
+    txt = (
+        f"id,hex id,{settings.collectible_name},catch date,trade_player"
+        ",special,shiny,attack,attack bonus,hp,hp_bonus\n"
+    )
+    for ball in balls:
+        txt += (
+            f"{ball.id},{ball.id:0X},{ball.ball.country},{ball.catch_date},"  # type: ignore
+            f"{ball.trade_player.discord_id if ball.trade_player else 'None'},{ball.special},"
+            f"{ball.shiny},{ball.attack},{ball.attack_bonus},{ball.health},{ball.health_bonus}\n"
+        )
+    return BytesIO(txt.encode("utf-8"))
+
+
+async def get_trades_csv(player: PlayerModel) -> BytesIO:
+    """
+    Get a CSV file with all trades of the player.
+    """
+    trade_history = (
+        await Trade.filter(Q(player1=player) | Q(player2=player))
+        .order_by("date")
+        .prefetch_related("player1", "player2")
+    )
+    txt = "id,date,player1,player2,player1 received,player2 received\n"
+    for trade in trade_history:
+        player1_items = await TradeObject.filter(
+            trade=trade, player=trade.player1
+        ).prefetch_related("ballinstance")
+        player2_items = await TradeObject.filter(
+            trade=trade, player=trade.player2
+        ).prefetch_related("ballinstance")
+        txt += (
+            f"{trade.id},{trade.date},{trade.player1.discord_id},{trade.player2.discord_id},"
+            f"{','.join([i.ballinstance.to_string() for i in player2_items])},"  # type: ignore
+            f"{','.join([i.ballinstance.to_string() for i in player1_items])}\n"  # type: ignore
+        )
+    return BytesIO(txt.encode("utf-8"))

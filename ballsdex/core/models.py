@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import IntEnum
 from io import BytesIO
 from typing import TYPE_CHECKING, Iterable, Tuple, Type
@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Iterable, Tuple, Type
 import discord
 from discord.utils import format_dt
 from fastapi_admin.models import AbstractAdmin
-from tortoise import exceptions, fields, models, signals, validators
+from tortoise import exceptions, fields, models, signals, timezone, validators
 
 from ballsdex.core.image_generator.image_gen import draw_card
 
@@ -31,7 +31,9 @@ async def lower_catch_names(
     update_fields: Iterable[str] | None = None,
 ):
     if instance.catch_names:
-        instance.catch_names = instance.catch_names.lower()
+        instance.catch_names = ";".join(
+            [x.strip() for x in instance.catch_names.split(";")]
+        ).lower()
 
 
 class DiscordSnowflakeValidator(validators.Validator):
@@ -97,6 +99,8 @@ class Special(models.Model):
         description="Either a unicode character or a discord emoji ID",
         null=True,
     )
+    tradeable = fields.BooleanField(default=True)
+    hidden = fields.BooleanField(default=False, description="Hides the event from user commands")
 
     def __str__(self) -> str:
         return self.name
@@ -144,6 +148,7 @@ class Ball(models.Model):
         max_length=256, description="Description of the countryball's capacity"
     )
     capacity_logic = fields.JSONField(description="Effect of this capacity", default={})
+    created_at = fields.DatetimeField(auto_now_add=True, null=True)
 
     instances: fields.BackwardFKRelation[BallInstance]
 
@@ -171,6 +176,7 @@ class BallInstance(models.Model):
         "models.Player", related_name="balls"
     )  # type: ignore
     catch_date = fields.DatetimeField(auto_now_add=True)
+    spawned_time = fields.DatetimeField(null=True)
     server_id = fields.BigIntField(
         description="Discord server ID where this ball was caught", null=True
     )
@@ -184,9 +190,24 @@ class BallInstance(models.Model):
         "models.Player", null=True, default=None, on_delete=fields.SET_NULL
     )
     favorite = fields.BooleanField(default=False)
+    tradeable = fields.BooleanField(default=True)
+    locked: fields.Field[datetime] = fields.DatetimeField(
+        description="If the instance was locked for a trade and when",
+        null=True,
+        default=None,
+    )
+    extra_data = fields.JSONField(default={})
 
     class Meta:
         unique_together = ("player", "id")
+
+    @property
+    def is_tradeable(self) -> bool:
+        return (
+            self.tradeable
+            and self.countryball.tradeable
+            and getattr(self.specialcard, "tradeable", True)
+        )
 
     @property
     def attack(self) -> int:
@@ -214,8 +235,10 @@ class BallInstance(models.Model):
     def __str__(self) -> str:
         return self.to_string()
 
-    def to_string(self, bot: discord.Client | None = None) -> str:
+    def to_string(self, bot: discord.Client | None = None, is_trade: bool = False) -> str:
         emotes = ""
+        if bot and self.pk in bot.locked_balls and not is_trade:  # type: ignore
+            emotes += "🔒"
         if self.favorite:
             emotes += "❤️"
         if self.shiny:
@@ -229,7 +252,7 @@ class BallInstance(models.Model):
             if isinstance(self.countryball, Ball)
             else f"<Ball {self.ball_id}>"
         )
-        return f"{emotes}#{self.pk:0X} {country} "
+        return f"{emotes}#{self.pk:0X} {country}"
 
     def special_emoji(self, bot: discord.Client | None, use_custom_emoji: bool = True) -> str:
         if self.specialcard:
@@ -253,8 +276,9 @@ class BallInstance(models.Model):
         short: bool = False,
         include_emoji: bool = False,
         bot: discord.Client | None = None,
+        is_trade: bool = False,
     ) -> str:
-        text = self.to_string(bot)
+        text = self.to_string(bot, is_trade=is_trade)
         if not short:
             text += f" ATK:{self.attack_bonus:+d}% HP:{self.health_bonus:+d}%"
         if include_emoji:
@@ -320,10 +344,33 @@ class BallInstance(models.Model):
 
         return content, discord.File(buffer, "card.png")
 
+<<<<<<< HEAD
+=======
+    async def lock_for_trade(self):
+        self.locked = timezone.now()
+        await self.save(update_fields=("locked",))
+
+    async def unlock(self):
+        self.locked = None  # type: ignore
+        await self.save(update_fields=("locked",))
+
+    async def is_locked(self):
+        await self.refresh_from_db(fields=("locked",))
+        self.locked
+        return self.locked is not None and (self.locked + timedelta(minutes=30)) > timezone.now()
+
+
+>>>>>>> upstream/master
 class DonationPolicy(IntEnum):
     ALWAYS_ACCEPT = 1
     REQUEST_APPROVAL = 2
     ALWAYS_DENY = 3
+
+
+class PrivacyPolicy(IntEnum):
+    ALLOW = 1
+    DENY = 2
+    SAME_SERVER = 3
 
 
 class Player(models.Model):
@@ -334,6 +381,11 @@ class Player(models.Model):
         DonationPolicy,
         description="How you want to handle donations",
         default=DonationPolicy.ALWAYS_ACCEPT,
+    )
+    privacy_policy = fields.IntEnumField(
+        PrivacyPolicy,
+        description="How you want to handle privacy",
+        default=PrivacyPolicy.DENY,
     )
     balls: fields.BackwardFKRelation[BallInstance]
 

@@ -74,7 +74,7 @@ class Pages(discord.ui.View):
                 self.add_item(self.go_to_last_page)
             if not self.compact:
                 self.add_item(self.numbered_page)
-            self.add_item(self.stop_pages)
+        self.add_item(self.stop_pages)
 
     async def _get_kwargs_from_page(self, page: int) -> Dict[str, Any]:
         value = await discord.utils.maybe_coroutine(self.source.format_page, self, page)
@@ -92,7 +92,6 @@ class Pages(discord.ui.View):
     async def show_page(self, interaction: discord.Interaction, page_number: int) -> None:
         page = await self.source.get_page(page_number)
         self.current_page = page_number
-        log.debug(f"Page shown: {self.current_page}")
         kwargs = await self._get_kwargs_from_page(page)
         self._update_labels(page_number)
         if kwargs is not None:
@@ -133,7 +132,6 @@ class Pages(discord.ui.View):
 
     async def show_checked_page(self, interaction: discord.Interaction, page_number: int) -> None:
         max_pages = self.source.get_max_pages()
-        log.debug(f"Trying to show page {page_number}/{max_pages}")
         try:
             if max_pages is None:
                 # If it doesn't give maximum pages, it cannot be checked

@@ -26,7 +26,13 @@ caught_balls = Counter(
 
 class CountryballNamePrompt(Modal, title=f"Atrapa a este {settings.collectible_name}."):
     name = TextInput(
+<<<<<<< HEAD
         label="Name of this fictional country", style=discord.TextStyle.short, placeholder="Your guess"
+=======
+        label=f"Name of this {settings.collectible_name}",
+        style=discord.TextStyle.short,
+        placeholder="Your guess",
+>>>>>>> upstream/master
     )
 
     def __init__(self, ball: "CountryBall", button: CatchButton):
@@ -37,9 +43,19 @@ class CountryballNamePrompt(Modal, title=f"Atrapa a este {settings.collectible_n
     async def on_error(self, interaction: discord.Interaction, error: Exception, /) -> None:
         log.exception("An error ocurred in fictionalball catching prompt.", exc_info=error)
         if interaction.response.is_done():
+<<<<<<< HEAD
             await interaction.followup.send("An error occured with this fictionalball.")
         else:
             await interaction.response.send_message("An error occured with this fictionalball.")
+=======
+            await interaction.followup.send(
+                f"An error occured with this {settings.collectible_name}."
+            )
+        else:
+            await interaction.response.send_message(
+                f"An error occured with this {settings.collectible_name}."
+            )
+>>>>>>> upstream/master
 
     async def on_submit(self, interaction: discord.Interaction["BallsDexBot"]):
         # TODO: use lock
@@ -61,7 +77,11 @@ class CountryballNamePrompt(Modal, title=f"Atrapa a este {settings.collectible_n
 
             special = ""
             if ball.shiny:
+<<<<<<< HEAD
                 special += f"✨ ***Congratulations! You got a shiny fictionalball!*** ✨\n"
+=======
+                special += f"✨ ***It's a shiny {settings.collectible_name}!*** ✨\n"
+>>>>>>> upstream/master
             if ball.specialcard and ball.specialcard.catch_phrase:
                 special += f"*{ball.specialcard.catch_phrase}*\n"
             if has_caught_before:
@@ -69,10 +89,10 @@ class CountryballNamePrompt(Modal, title=f"Atrapa a este {settings.collectible_n
                     f"This fictionalball is a **new fictionalball** "
                     "in your completion."
                 )
-
             await interaction.followup.send(
                 f"{interaction.user.mention} You caught **{self.ball.name}!** "
-                f"(`#{ball.pk:0X}`)\n\n{special}",
+                f"`(#{ball.pk:0X}, {ball.attack_bonus:+}%/{ball.health_bonus:+}%)`\n\n"
+                f"{special}"
             )
             self.button.disabled = True
             await interaction.followup.edit_message(self.ball.message.id, view=self.button.view)
@@ -96,7 +116,7 @@ class CountryballNamePrompt(Modal, title=f"Atrapa a este {settings.collectible_n
             # Here we try to determine what should be the chance of having a common card
             # since the rarity field is a value between 0 and 1, 1 being no common
             # and 0 only common, we get the remaining value by doing (1-rarity)
-            # We the sum each value for each current event, and we should get an algorithm
+            # We then sum each value for each current event, and we should get an algorithm
             # that kinda makes sense.
             common_weight = sum(1 - x.rarity for x in population)
 
@@ -113,6 +133,7 @@ class CountryballNamePrompt(Modal, title=f"Atrapa a este {settings.collectible_n
             attack_bonus=bonus_attack,
             health_bonus=bonus_health,
             server_id=user.guild.id,
+            spawned_time=self.ball.time,
         )
         if user.id in bot.catch_log:
             log.info(
